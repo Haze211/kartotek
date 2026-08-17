@@ -1,0 +1,24 @@
+# sbt
+target/
+project/target/
+project/project/
+
+# Metals / BSP / Bloop
+.bloop/
+.metals/
+.bsp/
+metals.sbt
+
+# IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
