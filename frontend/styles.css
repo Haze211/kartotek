@@ -1,0 +1,288 @@
+/* Kartotek — card-index styling.
+   Carried over from the original prototype, extended for the new views. */
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f0f2f5;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.header-bar {
+  background-color: #e7ebf2;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-bar h4 {
+  margin: 0;
+}
+
+.header-icons span {
+  margin-left: 1rem;
+  cursor: pointer;
+}
+
+.error-banner {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #fecaca;
+}
+
+.content {
+  display: flex;
+  overflow: hidden;
+  flex: 1;
+}
+
+/* --- card index sidebar ------------------------------------------------- */
+
+.sidebar {
+  width: 300px;
+  background: #e0e0e0;
+  padding: 1rem;
+  overflow-y: auto;
+  position: relative;
+  margin: 0 5px;
+  box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 15px 15px 20px 20px;
+}
+
+.card-stack {
+  position: relative;
+  margin-top: 1.5rem;
+  min-height: 400px;
+}
+
+.card {
+  position: absolute;
+  width: 90%;
+  height: 80px;
+  border-radius: 12px;
+  padding: 1rem;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  overflow: visible; /* lets the tab extend outside the card */
+  border: 1px solid #ddd;
+  background: linear-gradient(145deg, #fefefe, #f2f2f2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.card-tab {
+  position: absolute;
+  top: -10px;
+  right: 0;
+  padding: 0.3rem 0.8rem;
+  font-weight: bold;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: linear-gradient(145deg, #fefefe, #f2f2f2);
+}
+
+.card-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+}
+
+.card.selected {
+  z-index: 10;
+  transform: scale(1.03) translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: #4f46e5;
+}
+
+.empty-hint {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* --- buttons ------------------------------------------------------------ */
+
+.add-button {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  width: 100%;
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.add-button:hover {
+  background-color: #3730a3;
+}
+
+.close-button {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  width: 100%;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: #b91c1c;
+}
+
+/* --- main panel --------------------------------------------------------- */
+
+.main-content {
+  position: relative;
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.main-card.expanded {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.15);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.close-icon {
+  cursor: pointer;
+  font-size: 18px;
+  color: #888;
+  transition: color 0.2s ease;
+}
+
+.close-icon:hover {
+  color: black;
+}
+
+.baseline-meta p {
+  margin: 4px 0;
+  font-size: 0.9em;
+}
+
+/* --- change log --------------------------------------------------------- */
+
+.change-log-entry {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #ccc;
+}
+
+.change-log-header {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  font-size: 0.9em;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.log-date {
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.dotted-line {
+  flex-grow: 1;
+  border-bottom: 3px dashed #999;
+  height: 0;
+}
+
+.log-description p {
+  margin: 2px 0;
+  font-weight: normal;
+  font-size: 0.9em;
+}
+
+/* --- modal and slide panel ---------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 16px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.slide-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: 320px;
+  height: 100%;
+  background: white;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.2);
+  padding: 1rem;
+  box-sizing: border-box;
+  transition: transform 0.3s ease;
+  z-index: 100;
+  overflow-y: auto;
+}
+
+.slide-content {
+  margin-top: 1rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.75rem;
+}
+
+.form-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 0.25rem;
+}
+
+.form-field input {
+  padding: 0.45rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.form-field input:focus {
+  outline: none;
+  border-color: #4f46e5;
+}
