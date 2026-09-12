@@ -20,11 +20,23 @@ frontend/   Scala.js + Laminar UI — App.scala, ApiClient.scala, models
 
 ## Running
 
-Backend (needs MongoDB on `localhost:27017`, or set `KARTOTEK_MONGO_URI`):
+Infrastructure (MongoDB + a web UI for it) runs in Docker:
+
+```bash
+docker compose up -d      # mongo on :27017, mongo-express on :8081
+docker compose down       # stop, data survives in the mongo-data volume
+docker compose down -v    # stop and wipe the data
+```
+
+Backend:
 
 ```bash
 sbt backend/run     # serves on :8080
 ```
+
+It defaults to the compose stack's dev credentials
+(`mongodb://admin:admin@localhost:27017/?authSource=admin`). Point it
+elsewhere with `KARTOTEK_MONGO_URI`.
 
 Frontend:
 

@@ -1,0 +1,74 @@
+# Local dev stack for Kartotek (and whatever else gets added later).
+#
+#   docker compose up -d          start
+#   docker compose down           stop, keeping data
+#   docker compose down -v        stop and wipe the volumes
+#
+# Mongo is published on 27017 so the backend can run on the host via
+# `sbt backend/run`. Credentials are dev-only throwaways.
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: kartotek-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_DATABASE: kartotek
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - kartotek
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: kartotek-mongo-ui
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongo
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin
+      # 1.0.x defaults this to on (admin/pass). Off for local dev.
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - kartotek
+
+  # later:
+  # neo4j:
+  #   image: neo4j:5
+  #   container_name: kartotek-neo4j
+  #   restart: unless-stopped
+  #   ports: ["7474:7474", "7687:7687"]
+  #   environment:
+  #     NEO4J_AUTH: neo4j/password
+  #   volumes: ["neo4j-data:/data"]
+  #   networks: [kartotek]
+  #
+  # mlflow:
+  #   image: ghcr.io/mlflow/mlflow
+  #   container_name: kartotek-mlflow
+  #   restart: unless-stopped
+  #   ports: ["5000:5000"]
+  #   networks: [kartotek]
+
+volumes:
+  mongo-data:
+  # neo4j-data:
+
+networks:
+  kartotek:
+    name: kartotek
