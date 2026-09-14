@@ -9,6 +9,8 @@ ThisBuild / scalacOptions ++= Seq(
   "-Wunused:all"
 )
 
+Global / autoStartServer := false
+
 val Http4sVersion     = "0.23.36"
 val CirceVersion      = "0.14.10"
 val Mongo4CatsVersion = "0.7.17"
@@ -52,3 +54,4 @@ lazy val frontend = (project in file("frontend"))
     libraryDependencies += "com.raquo" %%% "laminar" % LaminarVersion,
     scalaJSUseMainModuleInitializer := true
   )
+

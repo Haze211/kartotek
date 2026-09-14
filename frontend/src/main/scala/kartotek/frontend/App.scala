@@ -8,16 +8,37 @@ import kartotek.frontend.models.{ChangeLog, DataProduct}
 
 /** Kartotek — a card index of data product baselines.
   *
-  * The card-stack sidebar and expand-into-log interaction are carried over
-  * from the original prototype; the data behind them now comes from the API
-  * instead of hardcoded mocks.
+  * Visual design ported from the "Kartotek Modern" design canvas: a light
+  * OKLCH palette, Instrument Sans + JetBrains Mono, and a card stack where
+  * hovering a card opens it in place while the cards in front of it slide
+  * down by a fixed gap to make room. See styles.css for the class names
+  * this markup depends on.
   */
 object App {
 
-  private val products: Var[List[DataProduct]]     = Var(Nil)
+  // Layout constants — must match the numbers baked into styles.css
+  // (.slot height, .card height) since the stack's geometry is computed here
+  // and only the per-card position is expressed as inline style.
+  private val TabH    = 54  // height of a card's visible strip in the stack
+  private val CardH   = 204 // height of a fully open card
+  private val OpenGap = 158 // how far cards in front slide down to clear the open one
+
+  // Cycled by card index — same four accent tints as the design canvas.
+  private val Tints = List(
+    "oklch(0.55 0.09 30)",
+    "oklch(0.55 0.09 150)",
+    "oklch(0.55 0.09 250)",
+    "oklch(0.55 0.09 85)"
+  )
+
+  private val products: Var[List[DataProduct]]          = Var(Nil)
   private val selectedProduct: Var[Option[DataProduct]] = Var(None)
-  private val changeLogs: Var[List[ChangeLog]]     = Var(Nil)
-  private val errorMessage: Var[Option[String]]    = Var(None)
+  private val changeLogs: Var[List[ChangeLog]]          = Var(Nil)
+  private val errorMessage: Var[Option[String]]         = Var(None)
+
+  // Which card is currently "open" from hover — separate from selection, so
+  // hovering a different card previews it without losing your actual pick.
+  private val hoveredIndex: Var[Option[Int]] = Var(None)
 
   private val showAddProduct: Var[Boolean] = Var(false)
   private val showAddLog: Var[Boolean]     = Var(false)
@@ -54,16 +75,22 @@ object App {
         }
     }
 
+  /** "PRD-001" etc. — presentational only, derived from list position. Not
+    * a stable identifier: it shifts if products are reordered or deleted.
+    * A real product code would need to come from the backend.
+    */
+  private def productCode(index: Int): String = f"PRD-${index + 1}%03d"
+
   // --- layout -------------------------------------------------------------
 
   private def appElement: HtmlElement =
     div(
-      cls := "app-container",
+      cls := "app",
       onMountCallback(_ => loadProducts()),
       headerBar,
       child.maybe <-- errorMessage.signal.map(_.map(msg => div(cls := "error-banner", msg))),
       div(
-        cls := "content",
+        cls := "layout",
         sidebar,
         mainPanel
       ),
@@ -73,110 +100,206 @@ object App {
 
   private def headerBar: HtmlElement =
     header(
-      cls := "header-bar",
-      h4("Kartotek"),
       div(
-        cls := "header-icons",
-        span("🔍"),
-        span("⚙️")
+        cls := "brand",
+        span(cls := "brand-name", "Kartotek"),
+        span(cls := "brand-sub mono", "data product index")
+      ),
+      div(
+        cls := "search",
+        span(cls := "search-dot"),
+        // Not wired up yet — decorative, matching the design canvas.
+        input(typ := "text", placeholder := "Search products, markets, changes"),
+        kbd(cls := "mono", "⌘K")
+      ),
+      div(
+        cls := "header-right",
+        span(
+          cls := "header-count mono",
+          child.text <-- products.signal.map(list => s"${list.size} products")
+        ),
+        span(cls := "header-settings", "Settings"),
+        // Placeholder until there's a real user/auth concept.
+        span(cls := "avatar", "YK")
       )
     )
 
   private def sidebar: HtmlElement =
-    div(
-      cls := "sidebar",
-      button(
-        cls := "add-button",
-        "Add Data Product",
-        onClick.mapTo(true) --> showAddProduct
+    aside(
+      div(
+        cls := "box-label-row",
+        span(cls := "box-label mono", "The box"),
+        button(cls := "btn-new", "+ New", onClick.mapTo(true) --> showAddProduct)
       ),
       div(
-        cls := "card-stack",
-        children <-- products.signal.combineWith(selectedProduct.signal).map { case (list, selected) =>
-          list.zipWithIndex.map { case (product, index) =>
-            renderCard(product, selected.exists(_.id == product.id), index)
-          }
-        }
+        cls := "box",
+        div(
+          cls := "stack",
+          styleAttr <-- products.signal.map(list => s"height:${stackHeight(list.size)}px"),
+          children <-- products.signal
+            .combineWith(selectedProduct.signal, hoveredIndex.signal, changeLogs.signal)
+            .map { case (list, selected, hovered, logs) =>
+              val selIdx = selected.flatMap(s => list.indexWhere(_.id == s.id) match {
+                case -1 => None
+                case i  => Some(i)
+              })
+              val openIdx = hovered.orElse(selIdx)
+              list.zipWithIndex.map { case (product, i) =>
+                renderCard(product, i, list.size, openIdx, selIdx, logs)
+              }
+            }
+        )
       ),
-      child.maybe <-- products.signal.map { list =>
-        Option.when(list.isEmpty)(p(cls := "empty-hint", "No data products yet."))
-      }
+      p(cls := "stack-hint mono", "hover to lift · click to open")
     )
 
-  /** A card in the index: stacked with a staggered offset, tab peeking out. */
-  private def renderCard(product: DataProduct, isSelected: Boolean, index: Int): HtmlElement =
+  private def stackHeight(n: Int): Int =
+    if (n == 0) CardH else CardH + (n - 1) * TabH + OpenGap
+
+  /** One card in the box. `openIdx` is whichever card is currently showing
+    * its full body — from hover if hovering, otherwise the selected card.
+    * Cards positioned in front of it (lower index) slide down by a fixed
+    * gap to clear room; nothing about this is per-card computed distance,
+    * it's the same OpenGap for all of them, which is what keeps their
+    * relative stacking order intact while they move as one group.
+    */
+  private def renderCard(
+      product: DataProduct,
+      index: Int,
+      total: Int,
+      openIdx: Option[Int],
+      selIdx: Option[Int],
+      selectedLogs: List[ChangeLog]
+  ): HtmlElement = {
+    val top        = (total - 1 - index) * TabH
+    val z          = total - index
+    val isOpen     = openIdx.contains(index)
+    val isSelected = selIdx.contains(index)
+    val shiftDown  = openIdx.exists(index < _)
+    val transform  = if (shiftDown) s"translateY(${OpenGap}px)" else "none"
+    val tint       = Tints(index % Tints.length)
+
+    // Log counts per card aren't available yet — the products list doesn't
+    // carry a summary, and fetching each product's log just to render the
+    // stack isn't worth an N+1 request. Show the real count only for the
+    // card whose log we've actually loaded (the selected one); a dash
+    // otherwise. Fixing this properly means adding a lightweight
+    // changeLogCount/lastChangeAt to the GET /data-products response.
+    val (entriesLabel, lastLabel) =
+      if (isSelected) {
+        val last = selectedLogs.lastOption.map(_.requestedOn).getOrElse("—")
+        (s"${selectedLogs.size}${if (selectedLogs.size == 1) " ENTRY" else " ENTRIES"}", s"LAST $last")
+      } else ("— ENTRIES", "—")
+
     div(
-      cls := "card",
-      cls.toggle("selected") := isSelected,
-      styleAttr := s"top: ${index * 50}px",
-      div(cls := "card-tab", product.market),
-      div(cls := "card-title", product.name),
-      onClick --> { _ => selectProduct(product) }
+      cls := s"slot${if (isOpen) " open" else ""}${if (isSelected) " selected" else ""}",
+      styleAttr := s"top:${top}px;z-index:$z;transform:$transform",
+      onMouseEnter --> { _ => hoveredIndex.set(Some(index)) },
+      onMouseLeave --> { _ => hoveredIndex.set(None) },
+      onClick --> { _ => selectProduct(product) },
+      div(
+        cls := "card",
+        div(cls := "card-tint", styleAttr := s"background:$tint"),
+        div(
+          cls := "card-top",
+          div(
+            span(cls := "card-code mono", productCode(index)),
+            div(cls := "card-name", product.name)
+          ),
+          span(cls := "card-market mono", product.market.toUpperCase)
+        ),
+        div(
+          cls := "card-mid",
+          div(cls := "card-meta mono", s"${product.project} · ${product.createdBy}"),
+          div(cls := "card-desc", product.description)
+        ),
+        div(
+          cls := "card-foot mono",
+          span(entriesLabel),
+          span(lastLabel)
+        )
+      )
     )
+  }
 
   private def mainPanel: HtmlElement =
-    div(
-      cls := "main-content",
+    main(
       child <-- selectedProduct.signal.map {
-        case None =>
-          div(
-            h2("Welcome to Kartotek"),
-            p("Select a data product on the left to see its change log.")
-          )
-        case Some(product) =>
-          div(
-            cls := "main-card expanded",
-            div(
-              cls := "card-header",
-              h2(product.name),
-              span(
-                cls := "close-icon",
-                "✖",
-                onClick --> { _ => selectedProduct.set(None) }
-              )
-            ),
-            div(
-              cls := "baseline-meta",
-              p(b("Market: "), product.market),
-              p(b("Project: "), product.project),
-              p(b("Created by: "), product.createdBy),
-              p(product.description)
-            ),
-            button(
-              cls := "add-button",
-              "Add Log Entry",
-              onClick.mapTo(true) --> showAddLog
-            ),
-            div(
-              cls := "change-log-list",
-              children <-- changeLogs.signal.map(_.map(renderLogEntry))
-            )
-          )
+        case None          => emptyState
+        case Some(product) => selectedView(product)
       }
+    )
+
+  private def emptyState: HtmlElement =
+    div(
+      cls := "empty-state",
+      h1("Every product, and what changed in it."),
+      p("Pull a card from the box to read its baseline and change log.")
+    )
+
+  private def selectedView(product: DataProduct): HtmlElement =
+    div(
+      div(
+        cls := "sel-head",
+        div(
+          div(cls := "sel-code mono", productCode(indexOf(product))),
+          h1(cls := "sel-title", product.name)
+        ),
+        button(cls := "btn-close", "Close", onClick --> { _ => selectedProduct.set(None) })
+      ),
+      div(
+        cls := "stat-grid",
+        statTile("Market", product.market),
+        statTile("Project", product.project),
+        statTile("Owner", product.createdBy),
+        div(
+          cls := "stat",
+          div(cls := "stat-label mono", "Entries"),
+          div(cls := "stat-value", child.text <-- changeLogs.signal.map(_.size.toString))
+        )
+      ),
+      p(cls := "sel-desc", product.description),
+      div(
+        cls := "log-head",
+        span(cls := "log-label mono", "Change log"),
+        button(cls := "btn-accent", "Add entry", onClick.mapTo(true) --> showAddLog)
+      ),
+      children <-- changeLogs.signal.map { logs =>
+        if (logs.isEmpty) List(p(cls := "log-empty", "No entries yet."))
+        else logs.map(renderLogEntry)
+      }
+    )
+
+  private def indexOf(product: DataProduct): Int =
+    products.now().indexWhere(_.id == product.id) match {
+      case -1 => 0
+      case i  => i
+    }
+
+  private def statTile(labelText: String, value: String): HtmlElement =
+    div(
+      cls := "stat",
+      div(cls := "stat-label mono", labelText),
+      div(cls := "stat-value", value)
     )
 
   private def renderLogEntry(log: ChangeLog): HtmlElement =
     div(
-      cls := "change-log-entry",
+      cls := "log-entry",
+      div(cls := "log-date mono", log.requestedOn),
       div(
-        cls := "change-log-header",
-        span(cls := "log-date", log.requestedOn),
-        span(cls := "dotted-line")
-      ),
-      div(
-        cls := "log-description",
-        p(b("Change: "), log.changeDescription),
-        p(b("Requested by: "), log.requestedBy),
-        p(log.detailedDescription)
+        div(cls := "log-change", log.changeDescription),
+        div(cls := "log-detail", log.detailedDescription),
+        div(cls := "log-by mono", log.requestedBy)
       )
     )
 
   // --- forms --------------------------------------------------------------
 
-  private def field(label: String, target: Var[String]): HtmlElement =
-    div(
-      cls := "form-field",
-      span(cls := "form-label", label),
+  private def field(labelText: String, target: Var[String]): HtmlElement =
+    label(
+      cls := "field",
+      span(cls := "field-label mono", labelText),
       input(
         typ := "text",
         value <-- target.signal,
@@ -205,15 +328,20 @@ object App {
     div(
       cls := "modal-backdrop",
       div(
-        cls := "modal-content",
-        h2("Add New Data Product"),
-        field("Name", name),
-        field("Description", description),
-        field("Market", market),
-        field("Project", project),
-        field("Created by", createdBy),
-        button(cls := "add-button", "Save", onClick --> { _ => submit() }),
-        button(cls := "close-button", "Cancel", onClick.mapTo(false) --> showAddProduct)
+        cls := "modal",
+        h2("New data product"),
+        div(
+          cls := "field-grid",
+          field("Name", name),
+          field("Description", description),
+          div(cls := "field-row-2", field("Market", market), field("Project", project)),
+          field("Created by", createdBy)
+        ),
+        div(
+          cls := "modal-actions",
+          button(cls := "btn-plain", "Cancel", onClick.mapTo(false) --> showAddProduct),
+          button(cls := "btn-accent", "Save product", onClick --> { _ => submit() })
+        )
       )
     )
   }
@@ -238,15 +366,18 @@ object App {
       }
 
     div(
-      cls := "slide-panel",
+      cls := "panel",
+      h2("Add log entry"),
       div(
-        cls := "slide-content",
-        h2("Add Log Entry"),
+        cls := "field-grid",
         field("Change", changeDescription),
         field("Requested by", requestedBy),
-        field("Details", detailedDescription),
-        button(cls := "add-button", "Save", onClick --> { _ => submit() }),
-        button(cls := "close-button", "Cancel", onClick.mapTo(false) --> showAddLog)
+        field("Details", detailedDescription)
+      ),
+      div(
+        cls := "panel-actions",
+        button(cls := "btn-accent", "Save", onClick --> { _ => submit() }),
+        button(cls := "btn-plain", "Cancel", onClick.mapTo(false) --> showAddLog)
       )
     )
   }

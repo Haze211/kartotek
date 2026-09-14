@@ -1,5 +1,6 @@
 package kartotek.backend
 
+import cats.effect.unsafe.IORuntimeConfig
 import cats.effect.{ExitCode, IO, IOApp, Resource}
 import cats.syntax.semigroupk.*
 import com.comcast.ip4s.{Host, Port}
@@ -11,6 +12,8 @@ import org.slf4j.LoggerFactory
 import kartotek.backend.config.AppConfig
 import kartotek.backend.repository.{ChangeLogRepository, DataProductRepository}
 import kartotek.backend.routes.{ChangeLogRoutes, DataProductRoutes}
+
+import scala.concurrent.duration.DurationInt
 
 object Main extends IOApp {
 
@@ -40,6 +43,11 @@ object Main extends IOApp {
         .withHttpApp(httpApp(client, config))
         .build
     } yield ()
+
+  override protected def runtimeConfig: IORuntimeConfig =
+    super.runtimeConfig.copy(
+      cpuStarvationCheckInterval = 5.seconds // was 1s
+    )
 
   override def run(args: List[String]): IO[ExitCode] = {
     val config = AppConfig.load()
